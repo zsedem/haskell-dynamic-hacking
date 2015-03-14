@@ -1,3 +1,4 @@
 run:
-	ghc -c -threaded -dynamic -O ForDynamiclyLoad.hs
+	ghc -c -threaded -O Core.hs
+	ghc -c -threaded -O ForDynamiclyLoad.hs
 	cabal run
