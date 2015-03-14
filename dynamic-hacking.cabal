@@ -11,11 +11,12 @@ cabal-version:       >=1.10
 
 executable dynamic-hacking
   main-is:             Main.hs
-
+  ghc-options:         -Wall -threaded -dynamic
   -- LANGUAGE extensions used by modules in this package.
-  -- other-extensions:
+  default-extensions: ScopedTypeVariables
 
-  build-depends:       base >=4.7 && <4.8
+  build-depends:       base >=4.7 && <4.8,
+                       plugins
 
   -- Directories containing source files.
   -- hs-source-dirs:
