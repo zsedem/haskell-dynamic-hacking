@@ -4,25 +4,29 @@
              PolyKinds,
              OverlappingInstances,
              ScopedTypeVariables,
-             ImpredicativeTypes #-}
+             ImpredicativeTypes,
+             RankNTypes #-}
 module Core where
 import Data.Typeable
 import Data.Dynamic
 import Data.Maybe
 import Data.Data
-import Debug.Trace
+import Debug.Trace hiding(trace)
 
 
-retrive simpleData = do
-    let nameOfType = (show $ typeOf $ fromJust $ retrive simpleData)
-    serviceDyn <- lookup (trace nameOfType nameOfType) simpleData
+retrive objRegistry = do
+    let nameOfType = (show $ typeOf $ fromJust $ retrive objRegistry)
+    serviceDyn <- lookup nameOfType objRegistry
     service <-  fromDynamic serviceDyn
     return service
 
-simpleData :: [(String, Dynamic)]
-simpleData = zip (map (show.dynTypeRep) sdata') sdata'
+objRegistry :: [(String, Dynamic)]
+objRegistry = zip (map (show.dynTypeRep) sdata') sdata'
   where
-    sdata' = [toDyn (ExampleService (ExampleServiceImplementation 42))]
+    exampleService' = ExampleService (ExampleServiceImplementation 42)
+    sdata' = [ toDyn exampleService'
+             , toDyn (NewService (NewServiceImplementation exampleService'))
+             ]
 
 
 -------------example service--------------------
@@ -55,24 +59,51 @@ instance NewServiceInterface NewServiceImplementation where
     calculation a b = numberprovider ( _exampleService a) + b
 -------------new service--------------------
 
-class Show s => Service s where
-    construct :: forall proxy a. Typeable a => proxy a -> s
+-- class Show s => Service s where
+--     construct :: forall proxy a. Typeable a => proxy a -> s
 
 --------wip-------------------
-invoke :: forall a b. (Typeable b, Typeable a) => [(String, Dynamic)] -> b a -> a
-invoke serviceMap func = let types = typeRepArgs $ typeOf (func)
-                             argTypes = map show $ init types
-                             returnType = last types
-                             dynFunc = toDyn func
+invoke :: (Typeable a, Typeable b) => [(String, Dynamic)] -> b -> a
+invoke serviceMap func = let types = functionTypeRepArgs (func)
+                             argTypes = map show $ trace $ types
                              resolve nameOfType = lookup nameOfType serviceMap
-                             resolvedArgs = map fromJust $ takeWhile isJust $ map resolve argTypes
-                         in  fromJust $ fromDynamic $ apply dynFunc resolvedArgs
+                             resolvedArgs = map fromJust $ take numOfServicesToInvoke $ map resolve argTypes
+                             appliedFunc = apply (toDyn func) resolvedArgs
+                             result = fromJust $ fromDynamic $ appliedFunc
+                             numOfServicesToInvoke = functionArgCount func - functionArgCount result
+                         in  result
+
+functionTypeRepArgs :: Typeable a => a -> [TypeRep]
+functionTypeRepArgs = functionTypeRepArgs'.typeOf
+
+functionArgCount :: Typeable a => a -> Int
+functionArgCount = length.functionTypeRepArgs
+
+
+functionTypeRepArgs' :: TypeRep -> [TypeRep]
+functionTypeRepArgs' typeRep = let  (tyCon, theTypeRepArgs) = splitTyConApp typeRep
+                                    (serviceType:restOfTheTypeRep) = theTypeRepArgs
+                                    functionTyCon = typeRepTyCon $ typeOf ((\x -> undefined)::Int -> Int)
+                               in if tyCon == functionTyCon
+                                    then
+                                      case restOfTheTypeRep of
+                                        []      -> [serviceType]
+                                        [x]     -> serviceType:functionTypeRepArgs' x
+                                    else
+                                      [typeRep]
+
 
 apply :: Dynamic -> [Dynamic] -> Dynamic
 apply f []            = f
 apply f (service:xs)  = apply (f `dynApp` service) xs
-
 --------
+
+somefunc :: NewService -> ExampleService -> Int -> Int -> String
+somefunc newService exampleService k j =
+    "calculation newService k: " ++ show (calculation newService k) ++ "\n" ++
+    "numberprovider exampleService + j: " ++ show (numberprovider exampleService + j)
+test :: Int -> Int -> String
+test = invoke objRegistry somefunc
 
 -----for debugging---------
 instance Show ExampleService where
@@ -81,3 +112,4 @@ instance Show ExampleService where
 instance Show NewService where
     show (NewService a) = "NewService " ++ show a
 
+trace a = traceShow a a
